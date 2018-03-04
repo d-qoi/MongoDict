@@ -1,25 +1,11 @@
 #!/usr/bin/env python
-#
-# An extension for a library that provides a Python interface to the Telegram Bot API
-# Copyright (C) 2018-
 # Alexander Hirschfeld <alex@d-qoi.com>
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Lesser Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Lesser Public License for more details.
-#
-# You should have received a copy of the GNU Lesser Public License
-# along with this program.  If not, see [http://www.gnu.org/licenses/].
+
 """This module contains the base class for a dictionary backed by MongoDB."""
 
 
 from pymongo import collection as MDB_collection
+from collections import defaultdict
 
 class MongoDict(dict):
     def __init__(self, collection=None, mirror=True, write_back=True, warm_cache=False):
@@ -31,6 +17,7 @@ class MongoDict(dict):
           the database for every get, it will write through to provide consistency.
           If the database is updated behind the cache, it will not be updated locally
         :param write_back: When set to false, it will not write to the database, if you want a read_only database
+        :param warm_cache: When this is true, it will pull everything immediately
 
         Setting Mirrored true and write_back to false will make this behave like a regular dictionary
         """
@@ -39,7 +26,7 @@ class MongoDict(dict):
         self.collection = collection
         self.mirror = mirror
         self.write_back = write_back
-        self.idb = dict()
+        self.idb = defaultdict(dict)
         if warm_cache:
             self.update_from_db()
 
@@ -136,13 +123,10 @@ class MongoDict(dict):
             res = self.collection.find_one_and_delete({'_id':k})
         else:
             res = self.collection.find_one({'_id':k})
-        try:
-            nres = self.idb.pop(k, d)
-        except KeyError as e:
-            pass
+
         if (res == None):
-            return nres
-        return d
+            return self.idb.pop(k, d)
+        return res
 
 
     def setdefault(self, k, d=None):  # real signature unknown; restored from __doc__
@@ -182,11 +166,11 @@ class MongoDict(dict):
 
     def __iter__(self, *args, **kwargs):  # real signature unknown
         self.update_from_db()
-        return self.idb.__iter__(*args, **kwargs)
+        return self.idb.__iter__()
 
     def __len__(self, *args, **kwargs):  # real signature unknown
         self.update_from_db()
-        return self.idb.__len__(*args, **kwargs)
+        return self.idb.__len__()
 
     # @staticmethod  # known case of __new__
     # def __new__(*args, **kwargs):  # real signature unknown
@@ -194,7 +178,7 @@ class MongoDict(dict):
 
     def __repr__(self, *args, **kwargs):  # real signature unknown
         self.update_from_db()
-        return self.idb.__repr__(*args, **kwargs)
+        return self.idb.__repr__()
 
     def __sizeof__(self):  # real signature unknown; restored from __doc__
         self.update_from_db()
