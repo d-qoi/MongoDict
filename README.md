@@ -24,7 +24,7 @@ If the database is updated behind the cache, it will not be updated locally unle
 
 Setting Mirrored true and write_back to false will make this behave like a regular dictionary
 
-###Extra functions:
+### Extra functions:
 * update_from_db():
 This will pull from the database, and update every key in the internal dict. **It will not remove any keys from the internal dictionary**
 
