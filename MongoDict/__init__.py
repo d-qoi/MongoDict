@@ -5,7 +5,6 @@
 
 
 from pymongo import collection as MDB_collection
-from collections import defaultdict
 
 class MongoDict(dict):
     def __init__(self, collection=None, mirror=True, write_back=True, warm_cache=False):
@@ -26,13 +25,16 @@ class MongoDict(dict):
         self.collection = collection
         self.mirror = mirror
         self.write_back = write_back
-        self.idb = defaultdict(dict)
+        self.idb = dict()
         if warm_cache:
             self.update_from_db()
 
     def update_from_db(self):
         for dic in self.collection.find({}):
-            self.idb[dic['_id']] = dic["data"]
+            if isinstance(dic['key'], list):
+                self.idb[tuple(dic['key'])] = dic["data"]
+            else:
+                self.idb[dic['key']] = dic["data"]
 
     def __getitem__(self, key):
         res = None
@@ -40,20 +42,20 @@ class MongoDict(dict):
             res = self.idb.get(key, None) # if mirror is false, it will always be empty, using get for the None
         if res:
             return res
-        res = self.collection.find_one({"_id":key})
+        res = self.collection.find_one({"key":key})
         if not res:
             raise KeyError("{} is not a key".format(key))
         if self.mirror:
-            self.idb[res['_id']] = res['data'] # update the cache, so that it can pull faster next time.
+            self.idb[key] = res['data'] # update the cache, so that it can pull faster next time.
         return res["data"]
 
     def __contains__(self, key):
         if self.mirror:
             if self.idb.__contains__(key):
                 return True
-        res = self.collection.find_one({"_id" : key})
+        res = self.collection.find_one({"key" : key})
         if res and self.mirror:
-            self.idb[res['_id']] = res['data']
+            self.idb[key] = res['data']
         return bool(res)
 
     # def __get(self, key):
@@ -62,7 +64,7 @@ class MongoDict(dict):
     def __delitem__(self, key):
         res = None
         if self.write_back:
-            res = self.collection.delete_one({"_id":key})
+            res = self.collection.delete_one({"key":key})
         try:
             self.idb.__delitem__(key)
         except KeyError as e:
@@ -73,17 +75,17 @@ class MongoDict(dict):
     def __setitem__(self, key, value):
         self.idb[key] = value
         if self.write_back:
-            self.collection.update_one({"_id":key}, {'$set':{"data":value}}, upsert=True)
+            self.collection.update_one({"key":key}, {'$set':{"data":value}}, upsert=True)
 
     def __missing__(self, key):
         res = False
         if self.mirror:
             res = self.idb.__missing__(key)
         if not res:
-            res = self.collection.find_one({'_id':key})
+            res = self.collection.find_one({'key':key})
             if res:
                 if self.mirror: # update the cache, if needed
-                    self.idb[res['_id']] = res['data']
+                    self.idb[key] = res['data']
             return False
         return True
 
@@ -120,9 +122,9 @@ class MongoDict(dict):
         If key is not found, d is returned if given, otherwise KeyError is raised
         """
         if self.write_back:
-            res = self.collection.find_one_and_delete({'_id':k})
+            res = self.collection.find_one_and_delete({'key':k})
         else:
-            res = self.collection.find_one({'_id':k})
+            res = self.collection.find_one({'key':k})
 
         if (res == None):
             return self.idb.pop(k, d)
