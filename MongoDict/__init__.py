@@ -69,7 +69,7 @@ class MongoDict(dict):
             self.idb.__delitem__(key)
         except KeyError as e:
             pass
-        if res and res.delete_count == 0:
+        if res and res.deleted_count == 0:
             raise KeyError()
 
     def __setitem__(self, key, value):
@@ -80,14 +80,14 @@ class MongoDict(dict):
     def __missing__(self, key):
         res = False
         if self.mirror:
-            res = self.idb.__missing__(key)
+            res = key in self.idb
         if not res:
             res = self.collection.find_one({'key':key})
             if res:
                 if self.mirror: # update the cache, if needed
                     self.idb[key] = res['data']
-            return False
-        return True
+            return True
+        return False
 
     def clear(self):  # real signature unknown; restored from __doc__
         """ D.clear() -> None.  Remove all items from D. """
@@ -104,7 +104,10 @@ class MongoDict(dict):
     def get(self, k, d=None):  # real signature unknown; restored from __doc__
         """ D.get(k[,d]) -> D[k] if k in D, else d.  d defaults to None. """
         if not self.__missing__(k):
-            return self.__getitem__(k)
+            try:
+                return self.__getitem__(k)
+            except KeyError:
+                pass
         return d
 
     def items(self):  # real signature unknown; restored from __doc__
@@ -121,14 +124,18 @@ class MongoDict(dict):
         D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
         If key is not found, d is returned if given, otherwise KeyError is raised
         """
+        res = d
+        try:
+            nres = self.idb.pop(k)
+        except KeyError:
+            nres = d
         if self.write_back:
             res = self.collection.find_one_and_delete({'key':k})
         else:
             res = self.collection.find_one({'key':k})
-
         if (res == None):
-            return self.idb.pop(k, d)
-        return res
+            return nres
+        return res['data']
 
 
     def setdefault(self, k, d=None):  # real signature unknown; restored from __doc__
